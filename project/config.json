@@ -1,0 +1,21 @@
+{
+    "intersection_name": "Main St & 1st Ave",
+    "camera_sources": {
+        "north": "camera_north.mp4",
+        "south": "camera_south.mp4", 
+        "east": "camera_east.mp4",
+        "west": "camera_west.mp4"
+    },
+    "detection_confidence": 0.5,
+    "min_green_time": 15,
+    "max_green_time": 60,
+    "yellow_time": 3,
+    "red_clearance_time": 2,
+    "adaptive_algorithm": "vehicle_density",
+    "emergency_priority": true,
+    "signal_hardware": {
+        "controller_ip": "192.168.1.100",
+        "api_endpoint": "/api/signals",
+        "protocol": "REST"
+    }
+}
