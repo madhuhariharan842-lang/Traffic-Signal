@@ -1,20 +1,11 @@
 @echo off
-echo 🚦 AI Traffic Control System - Windows Setup
-echo ============================================
+REM Activate your virtual environment first if you use one.
+REM Example: call venv\Scripts\activate
 
-echo Installing requirements...
-pip install -r requirements.txt
+REM 1) Start the adaptive processing (runs detection & writes state.json)
+start python adaptive_signal.py
 
-echo.
-echo Downloading YOLO weights (first time only)...
-python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
-
-echo.
-echo Starting AI Traffic Control System...
-echo Open your browser to: http://localhost:8501
-echo Press Ctrl+C to stop the system
-echo.
-
-streamlit run streamlit_app.py --server.port 8501 --server.address localhost
+REM 2) Start Streamlit dashboard
+start streamlit run app.py
 
 pause
