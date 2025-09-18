@@ -1,151 +1,101 @@
+"""
+Streamlit dashboard to monitor AI traffic controller.
+- reads state.json updated by adaptive_signal.py
+- shows live camera feed by embedding the ESP32 stream or sample video (browser-side)
+- provides manual control buttons that write command.json for adaptive_signal.py to pick up
+"""
+
 import streamlit as st
-import numpy as np
-import pandas as pd
-import plotly.express as px
+import time
+import json
+import os
 from datetime import datetime
 
-st.set_page_config(page_title="AI Traffic Control", page_icon="🚦", layout="wide")
+STATE_FILE = "state.json"
+COMMAND_FILE = "command.json"
+CONFIG_FILE = "config.json"
 
-# Header
-st.markdown("""
-<div style="background: linear-gradient(90deg, #1f4e79, #2c5282); padding: 2rem; border-radius: 10px; margin-bottom: 2rem; text-align: center;">
-    <h1 style="color: white; margin: 0;">🚦 AI Traffic Control System</h1>
-    <h3 style="color: #bee3f8; margin: 0;">Real-time Adaptive Management - Main St & 1st Ave</h3>
-</div>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="AI Traffic Signal - Dashboard", layout="wide")
+
+# Load config
+with open(CONFIG_FILE, "r") as f:
+    cfg = json.load(f)
 
 # Sidebar
-with st.sidebar:
-    st.header("🎛️ Control Panel")
-    mode = st.selectbox("Operation Mode", ["AI Adaptive", "Manual Override", "Emergency Mode"])
-    
-    if mode == "AI Adaptive":
-        st.success("✅ AI controlling traffic automatically")
-        st.selectbox("AI Algorithm", ["YOLO + Adaptive Timing", "Reinforcement Learning"])
-    
-    if st.button("🚨 Emergency Override"):
-        st.error("🚨 Emergency mode activated!")
-    
-    if st.button("🔄 Reset Normal"):
-        st.success("✅ Normal operation restored")
+st.sidebar.title("Controls")
+st.sidebar.markdown("Manual override and settings")
 
-# Main metrics
-col1, col2, col3, col4 = st.columns(4)
+duration = st.sidebar.number_input("Manual override duration (s)", min_value=5, max_value=300, value=15, step=5)
+
+if st.sidebar.button("Set NS Green (Manual)"):
+    command = {"cmd":"NS_GREEN", "duration_s": duration}
+    with open(COMMAND_FILE, "w") as f:
+        json.dump(command, f)
+    st.sidebar.success("Command written: NS_GREEN")
+
+if st.sidebar.button("Set EW Green (Manual)"):
+    command = {"cmd":"EW_GREEN", "duration_s": duration}
+    with open(COMMAND_FILE, "w") as f:
+        json.dump(command, f)
+    st.sidebar.success("Command written: EW_GREEN")
+
+if st.sidebar.button("Set ALL RED (Manual)"):
+    command = {"cmd":"ALL_RED", "duration_s": duration}
+    with open(COMMAND_FILE, "w") as f:
+        json.dump(command, f)
+    st.sidebar.success("Command written: ALL_RED")
+
+st.sidebar.markdown("---")
+st.sidebar.write("Video source:")
+st.sidebar.write(cfg.get("video_source"))
+
+# Main layout
+col1, col2 = st.columns([2,1])
 
 with col1:
-    st.metric("System Status", "🟢 Online", "All systems operational")
+    st.header("Live Camera / Video")
+    # show embedded ESP32 stream if esp32; else show sample video link placeholder
+    if cfg.get("video_source") == "esp32":
+        esp_url = cfg.get("esp32_stream_url")
+        st.markdown(f"**ESP32 stream:** {esp_url}")
+        # embed stream in iframe (works for MJPEG). Some browsers may require additional handling.
+        st.image_placeholder = st.empty()
+        st.image_placeholder.image("placeholder.png")  # fallback
+
+        # We will show frames by reading state.json images are not stored; alternatively, show iframe:
+        st.markdown(f'<iframe src="{esp_url}" width="640" height="480"></iframe>', unsafe_allow_html=True)
+    else:
+        st.write("Using sample video from disk (preview below)")
+        # We can't stream local mp4 directly via Streamlit easily; provide file link and show periodic frame from state
+        st.info("If you want to see the frame, run adaptive_signal.py locally and it will write current frames to disk (optional).")
+
 with col2:
-    st.metric("Total Vehicles", f"{np.random.randint(35, 55)}", f"+{np.random.randint(1,8)}")
-with col3:
-    st.metric("Avg Wait Time", f"{round(2.3 + np.random.uniform(-0.5, 0.5), 1)} min", "-0.8 min")
-with col4:
-    st.metric("AI Efficiency", f"{round(94.2 + np.random.uniform(-2, 3), 1)}%", "+2.1%")
+    st.header("Signal Status")
+    state_box = st.empty()
+    counts_box = st.empty()
+    ambulance_box = st.empty()
+    last_cmd_box = st.empty()
 
-# Traffic monitoring
-st.subheader("📹 Live Traffic Monitoring")
+# Live update loop
+while True:
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                state = json.load(f)
+        except Exception:
+            state = None
+    else:
+        state = None
 
-col_main, col_signals = st.columns([3, 1])
+    if state:
+        # display signal states
+        ns = state["signal_states"]["north_south"]
+        ew = state["signal_states"]["east_west"]
+        counts = state["counts"]
+        ambulance = state.get("ambulance_dirs", [])
 
-with col_main:
-    st.info("🎥 Live camera feeds - AI processing in real-time")
-    
-    # Vehicle counts
-    subcol1, subcol2, subcol3, subcol4 = st.columns(4)
-    
-    directions = [
-        ("⬆️ North Lane", np.random.randint(8, 18), subcol1),
-        ("⬇️ South Lane", np.random.randint(6, 15), subcol2), 
-        ("➡️ East Lane", np.random.randint(10, 20), subcol3),
-        ("⬅️ West Lane", np.random.randint(5, 12), subcol4)
-    ]
-    
-    vehicle_data = []
-    
-    for name, count, col in directions:
-        with col:
-            if count < 10:
-                color, density = "🟢", "Low"
-            elif count < 15:
-                color, density = "🟡", "Medium" 
-            else:
-                color, density = "🔴", "High"
-            
-            st.metric(f"{color} {name}", count, f"{density} density")
-            vehicle_data.append(count)
-
-with col_signals:
-    st.subheader("🚦 Signal Status")
-    st.write(f"🟢 **North-South**: {np.random.randint(20, 45)}s")
-    st.write(f"🔴 **East-West**: {np.random.randint(20, 45)}s")
-    
-    st.subheader("🤖 AI Status")
-    st.success("✅ AI Detection: Active")
-    st.success("✅ Adaptive Control: Active")
-    st.info("🧠 Processing: 32 FPS")
-
-# Analytics
-st.subheader("📊 Real-time Analytics")
-
-chart_col1, chart_col2 = st.columns(2)
-
-with chart_col1:
-    # Traffic trend chart
-    hours = [f"{i}:00" for i in range(8, 18)]
-    df = pd.DataFrame({
-        'Time': hours,
-        'North': np.random.randint(5, 20, len(hours)),
-        'South': np.random.randint(5, 20, len(hours)),
-        'East': np.random.randint(5, 20, len(hours)),
-        'West': np.random.randint(5, 20, len(hours))
-    })
-    
-    fig = px.line(df, x='Time', y=['North', 'South', 'East', 'West'], 
-                  title="🚗 Vehicle Count Trends")
-    fig.update_layout(height=400)
-    st.plotly_chart(fig, use_container_width=True)
-
-with chart_col2:
-    # Current distribution
-    fig_pie = px.pie(
-        values=vehicle_data,
-        names=['North', 'South', 'East', 'West'],
-        title="🚦 Current Traffic Distribution"
-    )
-    fig_pie.update_layout(height=400)
-    st.plotly_chart(fig_pie, use_container_width=True)
-
-# Performance metrics
-st.subheader("⚡ System Performance")
-perf_col1, perf_col2, perf_col3, perf_col4 = st.columns(4)
-
-with perf_col1:
-    st.metric("🎯 Detection Accuracy", "94.2%", "↑ 2.1%")
-with perf_col2:
-    st.metric("⚡ Response Time", "1.8s", "↓ 0.3s")
-with perf_col3:
-    st.metric("🚚 Throughput", "87.5%", "↑ 12.3%")
-with perf_col4:
-    st.metric("🌱 Emission Reduction", "15.6%", "↑ 3.2%")
-
-# Success message
-st.success("🎉 **SUCCESS!** Your AI Traffic Control System is live on Streamlit Cloud!")
-st.info("🌍 This system is now accessible worldwide with real-time traffic management capabilities")
-
-# Implementation info
-with st.expander("🚀 Deployment Success Info"):
-    st.write(f"""
-    **🎊 Congratulations! Your system is successfully deployed!**
-    
-    ✅ **URL**: {st.experimental_get_query_params()}
-    ✅ **Status**: Live and operational  
-    ✅ **Features**: All traffic control features working
-    ✅ **Performance**: Real-time updates and analytics
-    ✅ **Accessibility**: Available worldwide
-    
-    **Next Steps:**
-    - Share your live URL with others
-    - Add to your portfolio/LinkedIn
-    - Consider scaling for production use
-    
-    **Time to Deploy**: Under 10 minutes! 🚀
-    """)
+        st.experimental_rerun()  # quick UI refresh; streamlit limitations: rerun to reflect updates
+    else:
+        st.write("Waiting for adaptive_signal.py to produce state.json...")
+        time.sleep(1)
+        st.experimental_rerun()
