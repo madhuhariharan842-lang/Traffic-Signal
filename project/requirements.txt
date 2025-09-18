@@ -1,5 +1,5 @@
-streamlit
-plotly
-pandas
+opencv-python
 numpy
-
+streamlit
+ultralytics
+pyserial
